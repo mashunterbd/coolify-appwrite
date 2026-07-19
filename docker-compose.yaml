@@ -1,0 +1,393 @@
+x-logging: &x-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-file: "5"
+      max-size: "10m"
+
+services:
+
+  # -------------------------------------------------------
+  # Appwrite — main API server
+  # -------------------------------------------------------
+  appwrite:
+    image: appwrite/appwrite:1.9.5
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - appwrite-uploads:/storage/uploads:rw
+      - appwrite-cache:/storage/cache:rw
+      - appwrite-config:/storage/config:rw
+      - appwrite-certificates:/storage/certificates:rw
+      - appwrite-functions:/storage/functions:rw
+      - appwrite-builds:/storage/builds:rw
+    depends_on:
+      - mariadb
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # -------------------------------------------------------
+  # Appwrite Console — web UI
+  # -------------------------------------------------------
+  appwrite-console:
+    image: appwrite/console:8.2.1
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+
+  # -------------------------------------------------------
+  # Realtime worker
+  # -------------------------------------------------------
+  appwrite-realtime:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: realtime
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - mariadb
+      - redis
+    env_file:
+      - .env
+
+  # -------------------------------------------------------
+  # Background workers
+  # -------------------------------------------------------
+  appwrite-worker-audits:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-audits
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    env_file:
+      - .env
+
+  appwrite-worker-webhooks:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-webhooks
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    env_file:
+      - .env
+
+  appwrite-worker-deletes:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-deletes
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    volumes:
+      - appwrite-uploads:/storage/uploads:rw
+      - appwrite-cache:/storage/cache:rw
+      - appwrite-functions:/storage/functions:rw
+      - appwrite-builds:/storage/builds:rw
+      - appwrite-certificates:/storage/certificates:rw
+    env_file:
+      - .env
+
+  appwrite-worker-databases:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-databases
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    env_file:
+      - .env
+
+  appwrite-worker-builds:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-builds
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    volumes:
+      - appwrite-functions:/storage/functions:rw
+      - appwrite-builds:/storage/builds:rw
+      - appwrite-uploads:/storage/uploads:rw
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  appwrite-worker-certificates:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-certificates
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    volumes:
+      - appwrite-config:/storage/config:rw
+      - appwrite-certificates:/storage/certificates:rw
+    env_file:
+      - .env
+
+  appwrite-worker-functions:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-functions
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+      - openruntimes-executor
+    env_file:
+      - .env
+
+  appwrite-worker-mails:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-mails
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+    env_file:
+      - .env
+
+  appwrite-worker-messaging:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-messaging
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+    volumes:
+      - appwrite-uploads:/storage/uploads:rw
+    env_file:
+      - .env
+
+  appwrite-worker-migrations:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-migrations
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - mariadb
+    volumes:
+      - appwrite-uploads:/storage/uploads:rw
+    env_file:
+      - .env
+
+  # -------------------------------------------------------
+  # Tasks / schedulers
+  # -------------------------------------------------------
+  appwrite-task-maintenance:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: maintenance
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+    env_file:
+      - .env
+
+  appwrite-task-scheduler-functions:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: schedule-functions
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - mariadb
+      - redis
+    env_file:
+      - .env
+
+  appwrite-task-scheduler-executions:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: schedule-executions
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - mariadb
+      - redis
+    env_file:
+      - .env
+
+  appwrite-task-scheduler-messages:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: schedule-messages
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - mariadb
+      - redis
+    env_file:
+      - .env
+
+  appwrite-worker-stats-resources:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-stats-resources
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    env_file:
+      - .env
+
+  appwrite-worker-stats-usage:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: worker-stats-usage
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      - redis
+      - mariadb
+    env_file:
+      - .env
+
+  # -------------------------------------------------------
+  # OpenRuntimes — function execution engine
+  # -------------------------------------------------------
+  openruntimes-executor:
+    image: openruntimes/executor:0.7.1
+    hostname: exc1
+    <<: *x-logging
+    restart: unless-stopped
+    stop_signal: SIGINT
+    networks:
+      - appwrite
+      - runtimes
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - appwrite-builds:/storage/builds:rw
+      - appwrite-functions:/storage/functions:rw
+      - /tmp:/tmp:rw
+    environment:
+      - OPR_EXECUTOR_IMAGE_PULL=enabled
+      - OPR_EXECUTOR_INACTIVE_TRESHOLD=${_APP_COMPUTE_INACTIVE_THRESHOLD:-600}
+      - OPR_EXECUTOR_MAINTENANCE_INTERVAL=${_APP_COMPUTE_MAINTENANCE_INTERVAL:-3600}
+      - OPR_EXECUTOR_NETWORK=${_APP_COMPUTE_RUNTIMES_NETWORK:-runtimes}
+      - OPR_EXECUTOR_DOCKER_HUB_USERNAME=${_APP_DOCKER_HUB_USERNAME}
+      - OPR_EXECUTOR_DOCKER_HUB_PASSWORD=${_APP_DOCKER_HUB_PASSWORD}
+      - OPR_EXECUTOR_ENV=${_APP_ENV:-production}
+      - OPR_EXECUTOR_RUNTIMES=${_APP_FUNCTIONS_RUNTIMES:-node-18.0,python-3.9,php-8.0}
+      - OPR_EXECUTOR_SECRET=${_APP_EXECUTOR_SECRET}
+      - OPR_EXECUTOR_RUNTIME_VERSIONS=v5
+      - OPR_EXECUTOR_LOGGING_CONFIG=${_APP_LOGGING_CONFIG}
+      - OPR_EXECUTOR_STORAGE_DEVICE=${_APP_STORAGE_DEVICE:-local}
+
+  openruntimes-proxy:
+    image: openruntimes/proxy:0.5.0
+    hostname: proxy
+    <<: *x-logging
+    restart: unless-stopped
+    stop_signal: SIGINT
+    networks:
+      - appwrite
+      - runtimes
+    environment:
+      - OPR_PROXY_WORKER_PER_CORE=${_APP_WORKER_PER_CORE:-6}
+      - OPR_PROXY_ENV=${_APP_ENV:-production}
+      - OPR_PROXY_EXECUTOR_SECRET=${_APP_EXECUTOR_SECRET}
+      - OPR_PROXY_SECRET=${_APP_EXECUTOR_SECRET}
+      - OPR_PROXY_LOGGING_CONFIG=${_APP_LOGGING_CONFIG}
+      - OPR_PROXY_ALGORITHM=random
+      - OPR_PROXY_EXECUTORS=exc1
+      - OPR_PROXY_HEALTHCHECK_INTERVAL=10000
+      - OPR_PROXY_MAX_TIMEOUT=600
+      - OPR_PROXY_HEALTHCHECK=enabled
+
+  # -------------------------------------------------------
+  # MariaDB — primary database
+  # -------------------------------------------------------
+  mariadb:
+    image: mariadb:10.11
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    volumes:
+      - appwrite-mariadb:/var/lib/mysql:rw
+    environment:
+      - MYSQL_ROOT_PASSWORD=${_APP_DB_ROOT_PASS}
+      - MYSQL_DATABASE=${_APP_DB_SCHEMA}
+      - MYSQL_USER=${_APP_DB_USER}
+      - MYSQL_PASSWORD=${_APP_DB_PASS}
+      - MARIADB_AUTO_UPGRADE=1
+    command: "mysqld --innodb-flush-method=fsync"
+
+  # -------------------------------------------------------
+  # Redis — cache / queue
+  # -------------------------------------------------------
+  redis:
+    image: redis:7.2.4-alpine
+    <<: *x-logging
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory            512mb
+      --maxmemory-policy     allkeys-lru
+      --maxmemory-samples    5
+    networks:
+      - appwrite
+    volumes:
+      - appwrite-redis:/data:rw
+
+networks:
+  gateway:
+    external: true
+  appwrite:
+  runtimes:
+
+volumes:
+  appwrite-mariadb:
+  appwrite-redis:
+  appwrite-cache:
+  appwrite-uploads:
+  appwrite-certificates:
+  appwrite-functions:
+  appwrite-builds:
+  appwrite-config:
