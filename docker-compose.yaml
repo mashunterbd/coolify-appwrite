@@ -7,6 +7,9 @@ x-logging: &x-logging
 
 x-common-variables: &common-variables
   _APP_ENV: ${_APP_ENV:-production}
+  _APP_OPENSSL_KEY_V1: ${_APP_OPENSSL_KEY_V1:?Encryption key is required}
+  _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
+  _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
   _APP_REDIS_HOST: ${_APP_REDIS_HOST:-redis}
   _APP_REDIS_PORT: ${_APP_REDIS_PORT:-6379}
   _APP_REDIS_USER: ${_APP_REDIS_USER:-}
@@ -22,6 +25,58 @@ x-common-variables: &common-variables
 services:
 
   # -------------------------------------------------------
+  # MariaDB — primary database (starts first)
+  # -------------------------------------------------------
+  mariadb:
+    image: mariadb:10.11
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    volumes:
+      - appwrite-mariadb:/var/lib/mysql:rw
+    environment:
+      MARIADB_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
+      MARIADB_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
+      MARIADB_USER: ${_APP_DB_USER:?Database user is required}
+      MARIADB_PASSWORD: ${_APP_DB_PASS:?Database password is required}
+      MARIADB_AUTO_UPGRADE: "1"
+      MYSQL_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
+      MYSQL_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
+      MYSQL_USER: ${_APP_DB_USER:?Database user is required}
+      MYSQL_PASSWORD: ${_APP_DB_PASS:?Database password is required}
+    command: "mysqld --innodb-flush-method=fsync"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # -------------------------------------------------------
+  # Redis — cache / queue (starts first)
+  # -------------------------------------------------------
+  redis:
+    image: redis:7.2.4-alpine
+    <<: *x-logging
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory            512mb
+      --maxmemory-policy     allkeys-lru
+      --maxmemory-samples    5
+    networks:
+      - appwrite
+    volumes:
+      - appwrite-redis:/data:rw
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # -------------------------------------------------------
   # Appwrite — main API server
   # -------------------------------------------------------
   appwrite:
@@ -29,6 +84,7 @@ services:
     <<: *x-logging
     restart: unless-stopped
     networks:
+      - gateway
       - appwrite
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -40,9 +96,9 @@ services:
       - appwrite-builds:/storage/builds:rw
     depends_on:
       mariadb:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       _APP_ENV: ${_APP_ENV:-production}
       _APP_LOCALE: ${_APP_LOCALE:-en}
@@ -134,7 +190,11 @@ services:
     <<: *x-logging
     restart: unless-stopped
     networks:
+      - gateway
       - appwrite
+    environment:
+      _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
+      _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
 
   # -------------------------------------------------------
   # Realtime worker
@@ -145,26 +205,16 @@ services:
     <<: *x-logging
     restart: unless-stopped
     networks:
+      - gateway
       - appwrite
     depends_on:
       mariadb:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
-      _APP_ENV: ${_APP_ENV:-production}
-      _APP_REDIS_HOST: ${_APP_REDIS_HOST:-redis}
-      _APP_REDIS_PORT: ${_APP_REDIS_PORT:-6379}
-      _APP_REDIS_USER: ${_APP_REDIS_USER:-}
-      _APP_REDIS_PASS: ${_APP_REDIS_PASS:-}
-      _APP_DB_HOST: ${_APP_DB_HOST:-mariadb}
-      _APP_DB_PORT: ${_APP_DB_PORT:-3306}
-      _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:?Database name is required}
-      _APP_DB_USER: ${_APP_DB_USER:?Database user is required}
-      _APP_DB_PASS: ${_APP_DB_PASS:?Database password is required}
+      <<: *common-variables
       _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
-      _APP_LOGGING_PROVIDER: ${_APP_LOGGING_PROVIDER:-}
-      _APP_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
 
   # -------------------------------------------------------
   # Background workers
@@ -177,8 +227,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     environment:
       <<: *common-variables
 
@@ -190,8 +242,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     environment:
       <<: *common-variables
 
@@ -203,8 +257,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     volumes:
       - appwrite-uploads:/storage/uploads:rw
       - appwrite-cache:/storage/cache:rw
@@ -222,8 +278,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     environment:
       <<: *common-variables
 
@@ -235,8 +293,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     volumes:
       - appwrite-functions:/storage/functions:rw
       - appwrite-builds:/storage/builds:rw
@@ -256,8 +316,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     volumes:
       - appwrite-config:/storage/config:rw
       - appwrite-certificates:/storage/certificates:rw
@@ -272,9 +334,12 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
-      - openruntimes-executor
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+      openruntimes-executor:
+        condition: service_started
     environment:
       <<: *common-variables
       _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
@@ -288,7 +353,8 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     environment:
       <<: *common-variables
       _APP_SMTP_HOST: ${_APP_SMTP_HOST:-}
@@ -305,7 +371,8 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     volumes:
       - appwrite-uploads:/storage/uploads:rw
     environment:
@@ -321,7 +388,8 @@ services:
     networks:
       - appwrite
     depends_on:
-      - mariadb
+      mariadb:
+        condition: service_healthy
     volumes:
       - appwrite-uploads:/storage/uploads:rw
     environment:
@@ -338,7 +406,8 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     environment:
       <<: *common-variables
       _APP_MAINTENANCE_INTERVAL: ${_APP_MAINTENANCE_INTERVAL:-86400}
@@ -356,8 +425,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - mariadb
-      - redis
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       <<: *common-variables
 
@@ -369,8 +440,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - mariadb
-      - redis
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       <<: *common-variables
 
@@ -382,8 +455,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - mariadb
-      - redis
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       <<: *common-variables
 
@@ -395,8 +470,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     environment:
       <<: *common-variables
       _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
@@ -409,8 +486,10 @@ services:
     networks:
       - appwrite
     depends_on:
-      - redis
-      - mariadb
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
     environment:
       <<: *common-variables
       _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
@@ -466,46 +545,6 @@ services:
       OPR_PROXY_HEALTHCHECK_INTERVAL: 10000
       OPR_PROXY_MAX_TIMEOUT: 600
       OPR_PROXY_HEALTHCHECK: enabled
-
-  # -------------------------------------------------------
-  # MariaDB — primary database
-  # -------------------------------------------------------
-  mariadb:
-    image: mariadb:10.11
-    <<: *x-logging
-    restart: unless-stopped
-    networks:
-      - appwrite
-    volumes:
-      - appwrite-mariadb:/var/lib/mysql:rw
-    environment:
-      MARIADB_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
-      MARIADB_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
-      MARIADB_USER: ${_APP_DB_USER:?Database user is required}
-      MARIADB_PASSWORD: ${_APP_DB_PASS:?Database password is required}
-      MARIADB_AUTO_UPGRADE: "1"
-      MYSQL_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
-      MYSQL_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
-      MYSQL_USER: ${_APP_DB_USER:?Database user is required}
-      MYSQL_PASSWORD: ${_APP_DB_PASS:?Database password is required}
-    command: "mysqld --innodb-flush-method=fsync"
-
-  # -------------------------------------------------------
-  # Redis — cache / queue
-  # -------------------------------------------------------
-  redis:
-    image: redis:7.2.4-alpine
-    <<: *x-logging
-    restart: unless-stopped
-    command: >
-      redis-server
-      --maxmemory            512mb
-      --maxmemory-policy     allkeys-lru
-      --maxmemory-samples    5
-    networks:
-      - appwrite
-    volumes:
-      - appwrite-redis:/data:rw
 
 networks:
   gateway:
