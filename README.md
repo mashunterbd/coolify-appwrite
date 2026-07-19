@@ -2,7 +2,7 @@
 
 Production-ready Appwrite configuration optimized for Coolify deployment. This repository contains a fully tested Docker Compose configuration that works seamlessly with Coolify's reverse proxy and environment management.
 
-[![Version](https://img.shields.io/badge/version-2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.0-blue.svg)](CHANGELOG.md)
 [![Appwrite](https://img.shields.io/badge/Appwrite-1.9.5-f02e65.svg)](https://appwrite.io)
 [![Coolify](https://img.shields.io/badge/Coolify-v4+-6C47FF.svg)](https://coolify.io)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -200,21 +200,23 @@ After deployment, verify:
 6. ✅ Enable Redis password protection
 7. ✅ Backup MariaDB data volume regularly
 
-## 🆕 What's New in v2.0
+## 🆕 What's New in v3.0
 
-### Critical Fixes
-- ✅ Fixed MariaDB initialization failures
-- ✅ Added required variable validation
-- ✅ Proper service dependency management
+### Critical Production Fixes (সব issues solved!)
+- ✅ **Gateway network added** - API, Console, Realtime এখন Coolify proxy-accessible
+- ✅ **Healthchecks implemented** - MariaDB & Redis properly wait for ready state
+- ✅ **Service dependencies fixed** - Workers wait for healthy DB + Redis
+- ✅ **Realtime environment complete** - All required variables included
+- ✅ **Console environment added** - Domain configuration included
+- ✅ **Proper startup order** - DB → Redis → Services → Workers
 
-### Improvements
-- ✅ All environment variables explicitly defined
-- ✅ Coolify auto-detects all variables
-- ✅ No .env file needed
-- ✅ Better error messages
-- ✅ Comprehensive documentation
+### Technical Improvements
+- 🔧 `service_healthy` conditions replace `service_started`
+- 🔧 MariaDB healthcheck with innodb initialization
+- 🔧 Redis healthcheck with ping response
+- 🔧 Enhanced common-variables with all critical vars
 
-See [CHANGELOG.md](CHANGELOG.md) for complete details.
+See [CRITICAL-FIXES-v3.md](CRITICAL-FIXES-v3.md) for complete details (বাংলা documentation).
 
 ## 🤝 Contributing
 
@@ -250,4 +252,4 @@ If this helped you deploy Appwrite on Coolify, please give it a star! ⭐
 
 **Made with ❤️ for the Coolify and Appwrite communities**
 
-Last Updated: 2026-07-19 | Version: 2.0
+Last Updated: 2026-07-19 | Version: 3.0
