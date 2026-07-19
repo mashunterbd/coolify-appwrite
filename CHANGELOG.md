@@ -1,5 +1,174 @@
 # Changelog - Appwrite for Coolify
 
+## Version 3.0 - Critical Production Fixes (2026-07-19)
+
+### 🔴 ALL CRITICAL ISSUES FIXED
+
+#### 1. Gateway Network Added ✅
+**Problem:** Services weren't accessible through Coolify proxy  
+**Solution:** Added `gateway` network to all exposed services
+
+```yaml
+appwrite:
+  networks:
+    - gateway  # Coolify proxy access
+    - appwrite # Internal communication
+
+appwrite-console:
+  networks:
+    - gateway  # Coolify accessible
+    - appwrite
+
+appwrite-realtime:
+  networks:
+    - gateway  # WebSocket access
+    - appwrite
+```
+
+#### 2. Healthchecks Implemented ✅
+**Problem:** Services started before MariaDB/Redis were ready  
+**Solution:** Added proper healthchecks with `service_healthy` conditions
+
+**MariaDB Healthcheck:**
+```yaml
+healthcheck:
+  test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+```
+
+**Redis Healthcheck:**
+```yaml
+healthcheck:
+  test: ["CMD", "redis-cli", "ping"]
+  interval: 5s
+  timeout: 3s
+  retries: 5
+  start_period: 10s
+```
+
+**Service Dependencies:**
+```yaml
+depends_on:
+  mariadb:
+    condition: service_healthy  # ✅ Waits for healthy state
+  redis:
+    condition: service_healthy  # ✅ Waits for healthy state
+```
+
+#### 3. Realtime Environment Complete ✅
+**Problem:** Realtime service missing critical environment variables  
+**Solution:** Added all required variables via common-variables
+
+```yaml
+appwrite-realtime:
+  environment:
+    <<: *common-variables  # Includes all critical vars
+    _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
+  networks:
+    - gateway  # WebSocket access
+    - appwrite
+```
+
+#### 4. Console Environment Added ✅
+**Problem:** Console had no environment variables  
+**Solution:** Added domain configuration
+
+```yaml
+appwrite-console:
+  environment:
+    _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
+    _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
+  networks:
+    - gateway
+    - appwrite
+```
+
+#### 5. Service Dependencies Fixed ✅
+**Problem:** Race conditions during startup  
+**Solution:** Proper dependency chain with health checks
+
+**Startup Order:**
+1. MariaDB starts (30s initialization)
+2. Redis starts (10s initialization)
+3. Appwrite API (waits for healthy DB + Redis)
+4. Console + Realtime (waits for healthy DB + Redis)
+5. All Workers (wait for healthy DB + Redis)
+
+#### 6. Common Variables Enhanced ✅
+**Problem:** Critical variables not in common-variables  
+**Solution:** Added all required variables
+
+```yaml
+x-common-variables: &common-variables
+  _APP_ENV: ${_APP_ENV:-production}
+  _APP_OPENSSL_KEY_V1: ${_APP_OPENSSL_KEY_V1:?Encryption key is required}
+  _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
+  _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
+  # ... all critical variables
+```
+
+### 📊 Impact
+
+**Before v3.0:**
+- ❌ Services not accessible through Coolify proxy
+- ❌ Race conditions during startup
+- ❌ Workers failing due to DB not ready
+- ❌ Realtime missing environment
+- ❌ Console not properly configured
+
+**After v3.0:**
+- ✅ All services properly exposed via gateway
+- ✅ No race conditions - proper startup order
+- ✅ Workers wait for healthy DB + Redis
+- ✅ Realtime has complete environment
+- ✅ Console properly configured
+- ✅ WebSocket works correctly
+
+### 🔧 Technical Changes
+
+| Component | Change | Reason |
+|-----------|--------|--------|
+| Networks | Added `gateway` to exposed services | Coolify proxy access |
+| MariaDB | Added healthcheck (30s start) | Ensure DB ready before connections |
+| Redis | Added healthcheck (10s start) | Ensure cache ready before workers |
+| Dependencies | `service_started` → `service_healthy` | Wait for ready state not just started |
+| Realtime | Added complete environment | Missing critical variables |
+| Console | Added environment variables | Missing domain config |
+| Common vars | Added `_APP_DOMAIN`, `_APP_OPENSSL_KEY_V1` | Required by all services |
+
+### ⚠️ Breaking Changes
+
+1. **Gateway network required:** Must create before deployment
+   ```bash
+   docker network create gateway
+   ```
+
+2. **All required variables must be set:** Deployment fails if missing
+   - `_APP_DOMAIN`
+   - `_APP_OPENSSL_KEY_V1`
+   - `_APP_EXECUTOR_SECRET`
+   - `_APP_DB_ROOT_PASS`
+   - `_APP_DB_SCHEMA`
+   - `_APP_DB_USER`
+   - `_APP_DB_PASS`
+
+### 🧪 Validation
+
+- ✅ `docker compose config` passes
+- ✅ All healthchecks configured
+- ✅ All networks properly assigned
+- ✅ All environment variables validated
+- ✅ Service startup order correct
+
+### 📝 New Documentation
+
+- `CRITICAL-FIXES-v3.md` - Detailed Bengali documentation of all fixes
+
+---
+
 ## Version 2.0 - Environment Variables Fix (2026-07-19)
 
 ### 🔧 Critical Fixes
@@ -146,7 +315,7 @@ Validated with:
 
 ---
 
-**Latest Version:** 2.0  
+**Latest Version:** 3.0  
 **Last Updated:** 2026-07-19  
 **Compatibility:** Coolify v4+  
 **Appwrite Version:** 1.9.5
