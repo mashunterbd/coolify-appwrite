@@ -39,9 +39,14 @@ docker network create gateway
 ```
 
 ### Step 2: Deploy in Coolify
+
 1. In Coolify, create a new **Docker Compose** resource
 2. Upload or paste your modified `docker-compose.yaml`
-3. Upload your `.env` file with all required environment variables
+3. **Configure Environment Variables in Coolify UI:**
+   - Coolify will automatically detect all required variables
+   - Fill in the REQUIRED variables (see section above)
+   - You can reference `.env.example` for all available options
+   - **DO NOT upload a .env file** - use Coolify's Environment Variables UI instead
 
 ### Step 3: Configure Domain Routing in Coolify
 
@@ -73,36 +78,62 @@ You need to configure **three separate domains/routes** in Coolify:
 
 ## 🔧 Required Environment Variables
 
-Ensure your `.env` file includes these critical variables:
+**CRITICAL:** All environment variables are now explicitly defined in the `docker-compose.yaml` file and will be automatically detected by Coolify.
+
+### ⚠️ REQUIRED Variables (Deployment will FAIL without these)
+
+These variables use the `:?` syntax to ensure they are provided:
 
 ```env
-# API Endpoint (your Coolify domain)
-_APP_ENDPOINT=https://api.yourdomain.com
+# Security (REQUIRED)
+_APP_OPENSSL_KEY_V1=your_encryption_key_here
+_APP_EXECUTOR_SECRET=your_executor_secret_here
+_APP_DOMAIN=api.yourdomain.com
 
-# Console URL (your console domain)
-_APP_CONSOLE_ENDPOINT=https://console.yourdomain.com
-
-# Database Configuration
-_APP_DB_HOST=mariadb
-_APP_DB_PORT=3306
+# Database (REQUIRED)
+_APP_DB_ROOT_PASS=your_secure_root_password
 _APP_DB_SCHEMA=appwrite
 _APP_DB_USER=appwrite
 _APP_DB_PASS=your_secure_password
-_APP_DB_ROOT_PASS=your_secure_root_password
+```
 
-# Redis Configuration
-_APP_REDIS_HOST=redis
-_APP_REDIS_PORT=6379
+### 🔑 How to Generate Secure Keys
 
-# Security
-_APP_EXECUTOR_SECRET=your_secret_key
-_APP_OPENSSL_KEY_V1=your_encryption_key
+Run these commands to generate secure random keys:
 
-# Functions Configuration
-_APP_COMPUTE_RUNTIMES_NETWORK=runtimes
+```bash
+# For encryption key and executor secret
+openssl rand -base64 32
 
-# Environment
+# For passwords
+openssl rand -hex 16
+```
+
+### 📋 All Environment Variables
+
+Coolify will automatically show ALL environment variables from the compose file in its UI. You can see the complete list in the `.env.example` file included in this repository.
+
+**Important Configuration Notes:**
+
+1. **No .env file needed:** Configure everything through Coolify's Environment Variables UI
+2. **Auto-detection:** Coolify reads variables directly from `docker-compose.yaml`
+3. **Validation:** Required variables (marked with `:?`) will prevent deployment if missing
+4. **Defaults:** Many variables have sensible defaults and are optional
+
+### Minimum Configuration for Quick Start
+
+```env
 _APP_ENV=production
+_APP_DOMAIN=api.yourdomain.com
+_APP_OPENSSL_KEY_V1=[generate with: openssl rand -base64 32]
+_APP_EXECUTOR_SECRET=[generate with: openssl rand -base64 32]
+_APP_DB_ROOT_PASS=[generate with: openssl rand -hex 16]
+_APP_DB_SCHEMA=appwrite
+_APP_DB_USER=appwrite
+_APP_DB_PASS=[generate with: openssl rand -hex 16]
+_APP_DB_HOST=mariadb
+_APP_REDIS_HOST=redis
+_APP_OPTIONS_FORCE_HTTPS=disabled
 ```
 
 ---
@@ -133,10 +164,23 @@ If realtime features don't work:
 
 ### 502 Bad Gateway
 If you get 502 errors:
-1. Check that all services are healthy: `docker ps`
-2. Verify database and Redis are running
-3. Check service logs in Coolify dashboard
-4. Ensure the `gateway` network exists and services are connected
+1. **Check MariaDB first** - it must start successfully
+2. Verify all REQUIRED environment variables are set in Coolify
+3. Check that all services are healthy: `docker ps`
+4. Verify database and Redis are running
+5. Check service logs in Coolify dashboard
+6. Ensure the `gateway` network exists and services are connected
+
+### MariaDB Initialization Errors
+If MariaDB fails with "Database is uninitialized and password option is not specified":
+1. Verify these REQUIRED variables are set in Coolify:
+   - `_APP_DB_ROOT_PASS`
+   - `_APP_DB_SCHEMA`
+   - `_APP_DB_USER`
+   - `_APP_DB_PASS`
+2. These variables use `:?` syntax and will prevent deployment if missing
+3. Check Coolify's Environment Variables page to ensure they're configured
+4. MariaDB container logs will show specific missing variables
 
 ### Container Name Conflicts
 If you see container name conflicts:
@@ -159,6 +203,10 @@ If services can't communicate:
 4. **SSL Certificates**: Coolify handles SSL certificate generation and renewal automatically
 5. **WebSocket**: Must be explicitly enabled in Coolify for the realtime service
 6. **Internal Communication**: Services communicate via service names (e.g., `mariadb`, `redis`)
+7. **Environment Variables**: All variables are explicitly defined in docker-compose.yaml and auto-detected by Coolify
+8. **Required Variables**: Variables marked with `:?` will prevent deployment if not set
+9. **No .env File**: Configure all variables through Coolify's Environment Variables UI
+10. **MariaDB Dependencies**: All Appwrite services wait for MariaDB to start successfully
 
 ---
 

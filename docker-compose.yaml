@@ -5,6 +5,20 @@ x-logging: &x-logging
       max-file: "5"
       max-size: "10m"
 
+x-common-variables: &common-variables
+  _APP_ENV: ${_APP_ENV:-production}
+  _APP_REDIS_HOST: ${_APP_REDIS_HOST:-redis}
+  _APP_REDIS_PORT: ${_APP_REDIS_PORT:-6379}
+  _APP_REDIS_USER: ${_APP_REDIS_USER:-}
+  _APP_REDIS_PASS: ${_APP_REDIS_PASS:-}
+  _APP_DB_HOST: ${_APP_DB_HOST:-mariadb}
+  _APP_DB_PORT: ${_APP_DB_PORT:-3306}
+  _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:?Database name is required}
+  _APP_DB_USER: ${_APP_DB_USER:?Database user is required}
+  _APP_DB_PASS: ${_APP_DB_PASS:?Database password is required}
+  _APP_LOGGING_PROVIDER: ${_APP_LOGGING_PROVIDER:-}
+  _APP_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
+
 services:
 
   # -------------------------------------------------------
@@ -25,10 +39,90 @@ services:
       - appwrite-functions:/storage/functions:rw
       - appwrite-builds:/storage/builds:rw
     depends_on:
-      - mariadb
-      - redis
-    env_file:
-      - .env
+      mariadb:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      _APP_ENV: ${_APP_ENV:-production}
+      _APP_LOCALE: ${_APP_LOCALE:-en}
+      _APP_OPTIONS_ABUSE: ${_APP_OPTIONS_ABUSE:-enabled}
+      _APP_OPTIONS_FORCE_HTTPS: ${_APP_OPTIONS_FORCE_HTTPS:-disabled}
+      _APP_OPENSSL_KEY_V1: ${_APP_OPENSSL_KEY_V1:?Encryption key is required}
+      _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
+      _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
+      _APP_DOMAIN_FUNCTIONS: ${_APP_DOMAIN_FUNCTIONS:-}
+      _APP_REDIS_HOST: ${_APP_REDIS_HOST:-redis}
+      _APP_REDIS_PORT: ${_APP_REDIS_PORT:-6379}
+      _APP_REDIS_USER: ${_APP_REDIS_USER:-}
+      _APP_REDIS_PASS: ${_APP_REDIS_PASS:-}
+      _APP_DB_HOST: ${_APP_DB_HOST:-mariadb}
+      _APP_DB_PORT: ${_APP_DB_PORT:-3306}
+      _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:?Database name is required}
+      _APP_DB_USER: ${_APP_DB_USER:?Database user is required}
+      _APP_DB_PASS: ${_APP_DB_PASS:?Database password is required}
+      _APP_SMTP_HOST: ${_APP_SMTP_HOST:-}
+      _APP_SMTP_PORT: ${_APP_SMTP_PORT:-}
+      _APP_SMTP_SECURE: ${_APP_SMTP_SECURE:-}
+      _APP_SMTP_USERNAME: ${_APP_SMTP_USERNAME:-}
+      _APP_SMTP_PASSWORD: ${_APP_SMTP_PASSWORD:-}
+      _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
+      _APP_INFLUXDB_HOST: ${_APP_INFLUXDB_HOST:-}
+      _APP_INFLUXDB_PORT: ${_APP_INFLUXDB_PORT:-}
+      _APP_STORAGE_LIMIT: ${_APP_STORAGE_LIMIT:-30000000}
+      _APP_STORAGE_PREVIEW_LIMIT: ${_APP_STORAGE_PREVIEW_LIMIT:-20000000}
+      _APP_STORAGE_ANTIVIRUS: ${_APP_STORAGE_ANTIVIRUS:-disabled}
+      _APP_STORAGE_ANTIVIRUS_HOST: ${_APP_STORAGE_ANTIVIRUS_HOST:-}
+      _APP_STORAGE_ANTIVIRUS_PORT: ${_APP_STORAGE_ANTIVIRUS_PORT:-}
+      _APP_STORAGE_DEVICE: ${_APP_STORAGE_DEVICE:-local}
+      _APP_STORAGE_S3_ACCESS_KEY: ${_APP_STORAGE_S3_ACCESS_KEY:-}
+      _APP_STORAGE_S3_SECRET: ${_APP_STORAGE_S3_SECRET:-}
+      _APP_STORAGE_S3_REGION: ${_APP_STORAGE_S3_REGION:-}
+      _APP_STORAGE_S3_BUCKET: ${_APP_STORAGE_S3_BUCKET:-}
+      _APP_STORAGE_DO_SPACES_ACCESS_KEY: ${_APP_STORAGE_DO_SPACES_ACCESS_KEY:-}
+      _APP_STORAGE_DO_SPACES_SECRET: ${_APP_STORAGE_DO_SPACES_SECRET:-}
+      _APP_STORAGE_DO_SPACES_REGION: ${_APP_STORAGE_DO_SPACES_REGION:-}
+      _APP_STORAGE_DO_SPACES_BUCKET: ${_APP_STORAGE_DO_SPACES_BUCKET:-}
+      _APP_STORAGE_BACKBLAZE_ACCESS_KEY: ${_APP_STORAGE_BACKBLAZE_ACCESS_KEY:-}
+      _APP_STORAGE_BACKBLAZE_SECRET: ${_APP_STORAGE_BACKBLAZE_SECRET:-}
+      _APP_STORAGE_BACKBLAZE_REGION: ${_APP_STORAGE_BACKBLAZE_REGION:-}
+      _APP_STORAGE_BACKBLAZE_BUCKET: ${_APP_STORAGE_BACKBLAZE_BUCKET:-}
+      _APP_STORAGE_LINODE_ACCESS_KEY: ${_APP_STORAGE_LINODE_ACCESS_KEY:-}
+      _APP_STORAGE_LINODE_SECRET: ${_APP_STORAGE_LINODE_SECRET:-}
+      _APP_STORAGE_LINODE_REGION: ${_APP_STORAGE_LINODE_REGION:-}
+      _APP_STORAGE_LINODE_BUCKET: ${_APP_STORAGE_LINODE_BUCKET:-}
+      _APP_STORAGE_WASABI_ACCESS_KEY: ${_APP_STORAGE_WASABI_ACCESS_KEY:-}
+      _APP_STORAGE_WASABI_SECRET: ${_APP_STORAGE_WASABI_SECRET:-}
+      _APP_STORAGE_WASABI_REGION: ${_APP_STORAGE_WASABI_REGION:-}
+      _APP_STORAGE_WASABI_BUCKET: ${_APP_STORAGE_WASABI_BUCKET:-}
+      _APP_FUNCTIONS_SIZE_LIMIT: ${_APP_FUNCTIONS_SIZE_LIMIT:-30000000}
+      _APP_FUNCTIONS_TIMEOUT: ${_APP_FUNCTIONS_TIMEOUT:-900}
+      _APP_FUNCTIONS_BUILD_TIMEOUT: ${_APP_FUNCTIONS_BUILD_TIMEOUT:-900}
+      _APP_FUNCTIONS_CPUS: ${_APP_FUNCTIONS_CPUS:-0}
+      _APP_FUNCTIONS_MEMORY: ${_APP_FUNCTIONS_MEMORY:-0}
+      _APP_FUNCTIONS_RUNTIMES: ${_APP_FUNCTIONS_RUNTIMES:-node-18.0,python-3.9,php-8.0}
+      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-executor/v1}
+      _APP_LOGGING_PROVIDER: ${_APP_LOGGING_PROVIDER:-}
+      _APP_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
+      _APP_MAINTENANCE_INTERVAL: ${_APP_MAINTENANCE_INTERVAL:-86400}
+      _APP_MAINTENANCE_RETENTION_CACHE: ${_APP_MAINTENANCE_RETENTION_CACHE:-2592000}
+      _APP_MAINTENANCE_RETENTION_EXECUTION: ${_APP_MAINTENANCE_RETENTION_EXECUTION:-1209600}
+      _APP_MAINTENANCE_RETENTION_AUDIT: ${_APP_MAINTENANCE_RETENTION_AUDIT:-1209600}
+      _APP_MAINTENANCE_RETENTION_ABUSE: ${_APP_MAINTENANCE_RETENTION_ABUSE:-86400}
+      _APP_MAINTENANCE_RETENTION_USAGE_HOURLY: ${_APP_MAINTENANCE_RETENTION_USAGE_HOURLY:-8640000}
+      _APP_SMS_PROVIDER: ${_APP_SMS_PROVIDER:-}
+      _APP_SMS_FROM: ${_APP_SMS_FROM:-}
+      _APP_GRAPHQL_MAX_BATCH_SIZE: ${_APP_GRAPHQL_MAX_BATCH_SIZE:-10}
+      _APP_GRAPHQL_MAX_COMPLEXITY: ${_APP_GRAPHQL_MAX_COMPLEXITY:-250}
+      _APP_GRAPHQL_MAX_DEPTH: ${_APP_GRAPHQL_MAX_DEPTH:-3}
+      _APP_VCS_GITHUB_APP_NAME: ${_APP_VCS_GITHUB_APP_NAME:-}
+      _APP_VCS_GITHUB_PRIVATE_KEY: ${_APP_VCS_GITHUB_PRIVATE_KEY:-}
+      _APP_VCS_GITHUB_APP_ID: ${_APP_VCS_GITHUB_APP_ID:-}
+      _APP_VCS_GITHUB_CLIENT_ID: ${_APP_VCS_GITHUB_CLIENT_ID:-}
+      _APP_VCS_GITHUB_CLIENT_SECRET: ${_APP_VCS_GITHUB_CLIENT_SECRET:-}
+      _APP_VCS_GITHUB_WEBHOOK_SECRET: ${_APP_VCS_GITHUB_WEBHOOK_SECRET:-}
+      _APP_ASSISTANT_OPENAI_API_KEY: ${_APP_ASSISTANT_OPENAI_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -53,10 +147,24 @@ services:
     networks:
       - appwrite
     depends_on:
-      - mariadb
-      - redis
-    env_file:
-      - .env
+      mariadb:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      _APP_ENV: ${_APP_ENV:-production}
+      _APP_REDIS_HOST: ${_APP_REDIS_HOST:-redis}
+      _APP_REDIS_PORT: ${_APP_REDIS_PORT:-6379}
+      _APP_REDIS_USER: ${_APP_REDIS_USER:-}
+      _APP_REDIS_PASS: ${_APP_REDIS_PASS:-}
+      _APP_DB_HOST: ${_APP_DB_HOST:-mariadb}
+      _APP_DB_PORT: ${_APP_DB_PORT:-3306}
+      _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:?Database name is required}
+      _APP_DB_USER: ${_APP_DB_USER:?Database user is required}
+      _APP_DB_PASS: ${_APP_DB_PASS:?Database password is required}
+      _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
+      _APP_LOGGING_PROVIDER: ${_APP_LOGGING_PROVIDER:-}
+      _APP_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
 
   # -------------------------------------------------------
   # Background workers
@@ -71,8 +179,8 @@ services:
     depends_on:
       - redis
       - mariadb
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-worker-webhooks:
     image: appwrite/appwrite:1.9.5
@@ -84,8 +192,8 @@ services:
     depends_on:
       - redis
       - mariadb
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-worker-deletes:
     image: appwrite/appwrite:1.9.5
@@ -103,8 +211,8 @@ services:
       - appwrite-functions:/storage/functions:rw
       - appwrite-builds:/storage/builds:rw
       - appwrite-certificates:/storage/certificates:rw
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-worker-databases:
     image: appwrite/appwrite:1.9.5
@@ -116,8 +224,8 @@ services:
     depends_on:
       - redis
       - mariadb
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-worker-builds:
     image: appwrite/appwrite:1.9.5
@@ -133,8 +241,10 @@ services:
       - appwrite-functions:/storage/functions:rw
       - appwrite-builds:/storage/builds:rw
       - appwrite-uploads:/storage/uploads:rw
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
+      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-executor/v1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -151,8 +261,8 @@ services:
     volumes:
       - appwrite-config:/storage/config:rw
       - appwrite-certificates:/storage/certificates:rw
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-worker-functions:
     image: appwrite/appwrite:1.9.5
@@ -165,8 +275,10 @@ services:
       - redis
       - mariadb
       - openruntimes-executor
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
+      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-executor/v1}
 
   appwrite-worker-mails:
     image: appwrite/appwrite:1.9.5
@@ -177,8 +289,13 @@ services:
       - appwrite
     depends_on:
       - redis
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
+      _APP_SMTP_HOST: ${_APP_SMTP_HOST:-}
+      _APP_SMTP_PORT: ${_APP_SMTP_PORT:-}
+      _APP_SMTP_SECURE: ${_APP_SMTP_SECURE:-}
+      _APP_SMTP_USERNAME: ${_APP_SMTP_USERNAME:-}
+      _APP_SMTP_PASSWORD: ${_APP_SMTP_PASSWORD:-}
 
   appwrite-worker-messaging:
     image: appwrite/appwrite:1.9.5
@@ -191,8 +308,10 @@ services:
       - redis
     volumes:
       - appwrite-uploads:/storage/uploads:rw
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
+      _APP_SMS_PROVIDER: ${_APP_SMS_PROVIDER:-}
+      _APP_SMS_FROM: ${_APP_SMS_FROM:-}
 
   appwrite-worker-migrations:
     image: appwrite/appwrite:1.9.5
@@ -205,8 +324,8 @@ services:
       - mariadb
     volumes:
       - appwrite-uploads:/storage/uploads:rw
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   # -------------------------------------------------------
   # Tasks / schedulers
@@ -220,8 +339,14 @@ services:
       - appwrite
     depends_on:
       - redis
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
+      _APP_MAINTENANCE_INTERVAL: ${_APP_MAINTENANCE_INTERVAL:-86400}
+      _APP_MAINTENANCE_RETENTION_CACHE: ${_APP_MAINTENANCE_RETENTION_CACHE:-2592000}
+      _APP_MAINTENANCE_RETENTION_EXECUTION: ${_APP_MAINTENANCE_RETENTION_EXECUTION:-1209600}
+      _APP_MAINTENANCE_RETENTION_AUDIT: ${_APP_MAINTENANCE_RETENTION_AUDIT:-1209600}
+      _APP_MAINTENANCE_RETENTION_ABUSE: ${_APP_MAINTENANCE_RETENTION_ABUSE:-86400}
+      _APP_MAINTENANCE_RETENTION_USAGE_HOURLY: ${_APP_MAINTENANCE_RETENTION_USAGE_HOURLY:-8640000}
 
   appwrite-task-scheduler-functions:
     image: appwrite/appwrite:1.9.5
@@ -233,8 +358,8 @@ services:
     depends_on:
       - mariadb
       - redis
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-task-scheduler-executions:
     image: appwrite/appwrite:1.9.5
@@ -246,8 +371,8 @@ services:
     depends_on:
       - mariadb
       - redis
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-task-scheduler-messages:
     image: appwrite/appwrite:1.9.5
@@ -259,8 +384,8 @@ services:
     depends_on:
       - mariadb
       - redis
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
 
   appwrite-worker-stats-resources:
     image: appwrite/appwrite:1.9.5
@@ -272,8 +397,9 @@ services:
     depends_on:
       - redis
       - mariadb
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
+      _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
 
   appwrite-worker-stats-usage:
     image: appwrite/appwrite:1.9.5
@@ -285,8 +411,9 @@ services:
     depends_on:
       - redis
       - mariadb
-    env_file:
-      - .env
+    environment:
+      <<: *common-variables
+      _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
 
   # -------------------------------------------------------
   # OpenRuntimes — function execution engine
@@ -306,18 +433,18 @@ services:
       - appwrite-functions:/storage/functions:rw
       - /tmp:/tmp:rw
     environment:
-      - OPR_EXECUTOR_IMAGE_PULL=enabled
-      - OPR_EXECUTOR_INACTIVE_TRESHOLD=${_APP_COMPUTE_INACTIVE_THRESHOLD:-600}
-      - OPR_EXECUTOR_MAINTENANCE_INTERVAL=${_APP_COMPUTE_MAINTENANCE_INTERVAL:-3600}
-      - OPR_EXECUTOR_NETWORK=${_APP_COMPUTE_RUNTIMES_NETWORK:-runtimes}
-      - OPR_EXECUTOR_DOCKER_HUB_USERNAME=${_APP_DOCKER_HUB_USERNAME}
-      - OPR_EXECUTOR_DOCKER_HUB_PASSWORD=${_APP_DOCKER_HUB_PASSWORD}
-      - OPR_EXECUTOR_ENV=${_APP_ENV:-production}
-      - OPR_EXECUTOR_RUNTIMES=${_APP_FUNCTIONS_RUNTIMES:-node-18.0,python-3.9,php-8.0}
-      - OPR_EXECUTOR_SECRET=${_APP_EXECUTOR_SECRET}
-      - OPR_EXECUTOR_RUNTIME_VERSIONS=v5
-      - OPR_EXECUTOR_LOGGING_CONFIG=${_APP_LOGGING_CONFIG}
-      - OPR_EXECUTOR_STORAGE_DEVICE=${_APP_STORAGE_DEVICE:-local}
+      OPR_EXECUTOR_IMAGE_PULL: enabled
+      OPR_EXECUTOR_INACTIVE_TRESHOLD: ${_APP_COMPUTE_INACTIVE_THRESHOLD:-600}
+      OPR_EXECUTOR_MAINTENANCE_INTERVAL: ${_APP_COMPUTE_MAINTENANCE_INTERVAL:-3600}
+      OPR_EXECUTOR_NETWORK: ${_APP_COMPUTE_RUNTIMES_NETWORK:-runtimes}
+      OPR_EXECUTOR_DOCKER_HUB_USERNAME: ${_APP_DOCKER_HUB_USERNAME:-}
+      OPR_EXECUTOR_DOCKER_HUB_PASSWORD: ${_APP_DOCKER_HUB_PASSWORD:-}
+      OPR_EXECUTOR_ENV: ${_APP_ENV:-production}
+      OPR_EXECUTOR_RUNTIMES: ${_APP_FUNCTIONS_RUNTIMES:-node-18.0,python-3.9,php-8.0}
+      OPR_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      OPR_EXECUTOR_RUNTIME_VERSIONS: v5
+      OPR_EXECUTOR_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
+      OPR_EXECUTOR_STORAGE_DEVICE: ${_APP_STORAGE_DEVICE:-local}
 
   openruntimes-proxy:
     image: openruntimes/proxy:0.5.0
@@ -329,16 +456,16 @@ services:
       - appwrite
       - runtimes
     environment:
-      - OPR_PROXY_WORKER_PER_CORE=${_APP_WORKER_PER_CORE:-6}
-      - OPR_PROXY_ENV=${_APP_ENV:-production}
-      - OPR_PROXY_EXECUTOR_SECRET=${_APP_EXECUTOR_SECRET}
-      - OPR_PROXY_SECRET=${_APP_EXECUTOR_SECRET}
-      - OPR_PROXY_LOGGING_CONFIG=${_APP_LOGGING_CONFIG}
-      - OPR_PROXY_ALGORITHM=random
-      - OPR_PROXY_EXECUTORS=exc1
-      - OPR_PROXY_HEALTHCHECK_INTERVAL=10000
-      - OPR_PROXY_MAX_TIMEOUT=600
-      - OPR_PROXY_HEALTHCHECK=enabled
+      OPR_PROXY_WORKER_PER_CORE: ${_APP_WORKER_PER_CORE:-6}
+      OPR_PROXY_ENV: ${_APP_ENV:-production}
+      OPR_PROXY_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      OPR_PROXY_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      OPR_PROXY_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
+      OPR_PROXY_ALGORITHM: random
+      OPR_PROXY_EXECUTORS: exc1
+      OPR_PROXY_HEALTHCHECK_INTERVAL: 10000
+      OPR_PROXY_MAX_TIMEOUT: 600
+      OPR_PROXY_HEALTHCHECK: enabled
 
   # -------------------------------------------------------
   # MariaDB — primary database
@@ -352,11 +479,15 @@ services:
     volumes:
       - appwrite-mariadb:/var/lib/mysql:rw
     environment:
-      - MYSQL_ROOT_PASSWORD=${_APP_DB_ROOT_PASS}
-      - MYSQL_DATABASE=${_APP_DB_SCHEMA}
-      - MYSQL_USER=${_APP_DB_USER}
-      - MYSQL_PASSWORD=${_APP_DB_PASS}
-      - MARIADB_AUTO_UPGRADE=1
+      MARIADB_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
+      MARIADB_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
+      MARIADB_USER: ${_APP_DB_USER:?Database user is required}
+      MARIADB_PASSWORD: ${_APP_DB_PASS:?Database password is required}
+      MARIADB_AUTO_UPGRADE: "1"
+      MYSQL_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
+      MYSQL_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
+      MYSQL_USER: ${_APP_DB_USER:?Database user is required}
+      MYSQL_PASSWORD: ${_APP_DB_PASS:?Database password is required}
     command: "mysqld --innodb-flush-method=fsync"
 
   # -------------------------------------------------------
