@@ -18,7 +18,7 @@ services:
         - doctor
       interval: 5s
       timeout: 5s
-      retries: &id003 12
+      retries: 12
     volumes:
       - appwrite-uploads:/storage/uploads:rw
       - appwrite-imports:/storage/imports:rw
@@ -29,10 +29,13 @@ services:
       - appwrite-sites:/storage/sites:rw
       - appwrite-builds:/storage/builds:rw
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
-    environment: &id002
+      redis:
+        &id002 condition: &id003 service_healthy
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: &id007 service_started
+    environment: &id008
       _APP_ENV: ${_APP_ENV}
       _APP_EDITION: ${_APP_EDITION}
       _APP_WORKER_PER_CORE: ${_APP_WORKER_PER_CORE}
@@ -160,6 +163,9 @@ services:
       _APP_MIGRATION_HOST: ${_APP_MIGRATION_HOST}
     expose:
       - '80'
+    &id004 networks:
+      - &id005 gateway
+      - &id006 appwrite
   appwrite-console:
     logging:
       driver: json-file
@@ -168,6 +174,9 @@ services:
         max-size: 10m
     image: appwrite/console:8.7.5
     restart: unless-stopped
+    *id004:
+      - *id005
+      - *id006
   appwrite-realtime:
     entrypoint: realtime
     logging:
@@ -178,10 +187,16 @@ services:
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     restart: unless-stopped
     depends_on:
-      - mariadb
-      - redis
-      - appwrite-embedding
-    environment: *id002
+      mariadb:
+        *id002: *id003
+      redis:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id005
+      - *id006
   appwrite-worker-audits:
     entrypoint: worker-audits
     logging:
@@ -191,10 +206,15 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-webhooks:
     entrypoint: worker-webhooks
     logging:
@@ -204,10 +224,15 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-deletes:
     entrypoint: worker-deletes
     logging:
@@ -217,9 +242,12 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
     volumes:
       - appwrite-uploads:/storage/uploads:rw
       - appwrite-cache:/storage/cache:rw
@@ -227,7 +255,9 @@ services:
       - appwrite-sites:/storage/sites:rw
       - appwrite-builds:/storage/builds:rw
       - appwrite-certificates:/storage/certificates:rw
-    environment: *id002
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-databases:
     entrypoint: worker-databases
     logging:
@@ -237,10 +267,15 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-builds:
     entrypoint: worker-builds
     logging:
@@ -254,12 +289,17 @@ services:
       - appwrite-sites:/storage/sites:rw
       - appwrite-builds:/storage/builds:rw
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
     extra_hosts:
       - host.docker.internal:host-gateway
+    *id004:
+      - *id006
   appwrite-worker-screenshots:
     entrypoint: worker-screenshots
     logging:
@@ -271,11 +311,15 @@ services:
     volumes:
       - appwrite-uploads:/storage/uploads:rw
     depends_on:
-      - redis
-      - mariadb
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+    environment: *id008
     extra_hosts:
       - host.docker.internal:host-gateway
+    *id004:
+      - *id006
   appwrite-worker-certificates:
     entrypoint: worker-certificates
     logging:
@@ -285,13 +329,18 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
     volumes:
       - appwrite-config:/storage/config:rw
       - appwrite-certificates:/storage/certificates:rw
-    environment: *id002
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-executions:
     entrypoint: worker-executions
     logging:
@@ -301,9 +350,13 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-functions:
     entrypoint: worker-functions
     logging:
@@ -313,9 +366,13 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - mariadb
-      - redis
-    environment: *id002
+      mariadb:
+        *id002: *id003
+      redis:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-mails:
     entrypoint: worker-mails
     logging:
@@ -325,9 +382,13 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-messaging:
     entrypoint: worker-messaging
     logging:
@@ -340,8 +401,11 @@ services:
     volumes:
       - appwrite-uploads:/storage/uploads:rw
     depends_on:
-      - redis
-    environment: *id002
+      redis:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-migrations:
     entrypoint: worker-migrations
     logging:
@@ -355,8 +419,11 @@ services:
       - appwrite-imports:/storage/imports:rw
       - appwrite-uploads:/storage/uploads:rw
     depends_on:
-      - mariadb
-    environment: *id002
+      mariadb:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-task-maintenance:
     entrypoint: maintenance
     restart: on-failure:3
@@ -367,9 +434,13 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - mariadb
-      - redis
-    environment: *id002
+      mariadb:
+        *id002: *id003
+      redis:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-task-interval:
     entrypoint: interval
     restart: on-failure:3
@@ -380,9 +451,13 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - mariadb
-      - redis
-    environment: *id002
+      mariadb:
+        *id002: *id003
+      redis:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-task-stats-resources:
     entrypoint: stats-resources
     restart: on-failure:3
@@ -393,9 +468,13 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-stats-resources:
     entrypoint: worker-stats-resources
     logging:
@@ -405,9 +484,13 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-worker-stats-usage:
     entrypoint: worker-stats-usage
     logging:
@@ -417,10 +500,15 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - redis
-      - mariadb
-      - appwrite-embedding
-    environment: *id002
+      redis:
+        *id002: *id003
+      mariadb:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-task-scheduler-functions:
     entrypoint: schedule-functions
     restart: on-failure:3
@@ -431,10 +519,15 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - mariadb
-      - redis
-      - appwrite-embedding
-    environment: *id002
+      mariadb:
+        *id002: *id003
+      redis:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-task-scheduler-executions:
     entrypoint: schedule-executions
     restart: on-failure:3
@@ -445,10 +538,15 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - mariadb
-      - redis
-      - appwrite-embedding
-    environment: *id002
+      mariadb:
+        *id002: *id003
+      redis:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-task-scheduler-messages:
     entrypoint: schedule-messages
     restart: on-failure:3
@@ -459,16 +557,25 @@ services:
         max-size: 10m
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - mariadb
-      - redis
-      - appwrite-embedding
-    environment: *id002
+      mariadb:
+        *id002: *id003
+      redis:
+        *id002: *id003
+      appwrite-embedding:
+        *id002: *id007
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-assistant:
     image: appwrite/assistant:0.8.4
-    environment: *id002
+    environment: *id008
+    *id004:
+      - *id006
   appwrite-browser:
     image: appwrite/browser:0.3.2
-    environment: *id002
+    environment: *id008
+    *id004:
+      - *id006
   openruntimes-executor:
     hostname: exc1
     logging:
@@ -485,7 +592,7 @@ services:
       - appwrite-functions:/storage/functions:rw
       - appwrite-sites:/storage/sites:rw
       - /tmp:/tmp:rw
-    environment: *id002
+    environment: *id008
     healthcheck:
       test:
         - CMD-SHELL
@@ -495,6 +602,8 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+    *id004:
+      - *id006
   mariadb:
     image: mariadb:10.11
     logging:
@@ -514,14 +623,17 @@ services:
       - mysqld
       - --innodb-flush-method=fsync
     healthcheck:
-      test:
-        - CMD
+      &id010 test:
+        - &id011 CMD
         - healthcheck.sh
         - --connect
         - --innodb_initialized
-      interval: 5s
-      timeout: 5s
-      retries: *id003
+      &id012 interval: &id017 10s
+      &id014 timeout: &id013 5s
+      &id015 retries: &id009 10
+      &id016 start_period: 30s
+    *id004:
+      - *id006
   postgresql:
     image: appwrite/postgres:0.1.0
     logging:
@@ -541,7 +653,7 @@ services:
         - pg_isready -U ${_APP_DB_USER} -d ${_APP_DB_SCHEMA}
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: *id009
       start_period: 10s
     command:
       - postgres
@@ -551,6 +663,8 @@ services:
       - synchronous_commit=off
       - -c
       - full_page_writes=off
+    *id004:
+      - *id006
   appwrite-embedding:
     image: appwrite/embedding:0.1.0
     environment:
@@ -558,6 +672,8 @@ services:
     restart: unless-stopped
     volumes:
       - appwrite-models:/home/embedder/models
+    *id004:
+      - *id006
   redis:
     image: redis:7.4.7-alpine
     logging:
@@ -576,25 +692,33 @@ services:
     volumes:
       - appwrite-redis:/data:rw
     healthcheck:
-      test:
-        - CMD
+      *id010:
+        - *id011
         - redis-cli
         - ping
-      interval: 5s
-      timeout: 5s
-      retries: *id003
+      *id012: *id013
+      *id014: 3s
+      *id015: 5
+      *id016: *id017
+    *id004:
+      - *id006
 volumes:
-  appwrite-mariadb: &id004 null
-  appwrite-postgresql: *id004
-  appwrite-redis: *id004
-  appwrite-cache: *id004
-  appwrite-uploads: *id004
-  appwrite-imports: *id004
-  appwrite-certificates: *id004
-  appwrite-functions: *id004
-  appwrite-sites: *id004
-  appwrite-builds: *id004
-  appwrite-config: *id004
-  appwrite-models: *id004
-  openruntimes-node-modules-cache: *id004
-x-appwrite-env: *id002
+  appwrite-mariadb: &id018 null
+  appwrite-postgresql: *id018
+  appwrite-redis: *id018
+  appwrite-cache: *id018
+  appwrite-uploads: *id018
+  appwrite-imports: *id018
+  appwrite-certificates: *id018
+  appwrite-functions: *id018
+  appwrite-sites: *id018
+  appwrite-builds: *id018
+  appwrite-config: *id018
+  appwrite-models: *id018
+  openruntimes-node-modules-cache: *id018
+x-appwrite-env: *id008
+*id004:
+  *id005:
+    &id019 name: *id005
+  *id006:
+    *id019: *id006
