@@ -1,3 +1,18 @@
+# =============================================================
+# Appwrite v1.9.5 — Production Docker Compose for Coolify
+# Domain : appwrite.doitfastit.de
+# Platform: Coolify Docker Compose Deployment (GitHub Source)
+#
+# Rules:
+#   - Coolify handles the reverse proxy (Traefik/Caddy).
+#     DO NOT add an extra Traefik/Nginx/Caddy container.
+#   - Only the main `appwrite` service is exposed via Coolify labels.
+#   - All other services communicate internally over Docker networks.
+#   - Named volumes guarantee persistence across container recreations.
+#   - Environment variables declared with ${VAR:-default} so Coolify
+#     can detect and surface them in its UI.
+# =============================================================
+
 x-logging: &x-logging
   logging:
     driver: "json-file"
@@ -5,28 +20,31 @@ x-logging: &x-logging
       max-file: "5"
       max-size: "10m"
 
+# Shared env-block reused by every worker/scheduler
 x-common-variables: &common-variables
   _APP_ENV: ${_APP_ENV:-production}
-  _APP_OPENSSL_KEY_V1: ${_APP_OPENSSL_KEY_V1:?Encryption key is required}
-  _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
-  _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
+  _APP_OPENSSL_KEY_V1: ${_APP_OPENSSL_KEY_V1:-CHANGE_THIS_32_CHAR_SECRET_KEY_1}
+  _APP_DOMAIN: ${_APP_DOMAIN:-appwrite.doitfastit.de}
+  _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-appwrite.doitfastit.de}
   _APP_REDIS_HOST: ${_APP_REDIS_HOST:-redis}
   _APP_REDIS_PORT: ${_APP_REDIS_PORT:-6379}
   _APP_REDIS_USER: ${_APP_REDIS_USER:-}
   _APP_REDIS_PASS: ${_APP_REDIS_PASS:-}
   _APP_DB_HOST: ${_APP_DB_HOST:-mariadb}
   _APP_DB_PORT: ${_APP_DB_PORT:-3306}
-  _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:?Database name is required}
-  _APP_DB_USER: ${_APP_DB_USER:?Database user is required}
-  _APP_DB_PASS: ${_APP_DB_PASS:?Database password is required}
+  _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:-appwrite}
+  _APP_DB_USER: ${_APP_DB_USER:-appwrite}
+  _APP_DB_PASS: ${_APP_DB_PASS:-CHANGE_THIS_DB_PASSWORD}
   _APP_LOGGING_PROVIDER: ${_APP_LOGGING_PROVIDER:-}
   _APP_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
 
+# =============================================================
 services:
 
-  # -------------------------------------------------------
-  # MariaDB — primary database (starts first)
-  # -------------------------------------------------------
+  # -----------------------------------------------------------
+  # MariaDB — Relational database (primary datastore)
+  # Starts first; all Appwrite services wait for healthy state.
+  # -----------------------------------------------------------
   mariadb:
     image: mariadb:10.11
     <<: *x-logging
@@ -36,35 +54,32 @@ services:
     volumes:
       - appwrite-mariadb:/var/lib/mysql:rw
     environment:
-      MARIADB_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
-      MARIADB_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
-      MARIADB_USER: ${_APP_DB_USER:?Database user is required}
-      MARIADB_PASSWORD: ${_APP_DB_PASS:?Database password is required}
+      MYSQL_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:-CHANGE_THIS_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${_APP_DB_SCHEMA:-appwrite}
+      MYSQL_USER: ${_APP_DB_USER:-appwrite}
+      MYSQL_PASSWORD: ${_APP_DB_PASS:-CHANGE_THIS_DB_PASSWORD}
       MARIADB_AUTO_UPGRADE: "1"
-      MYSQL_ROOT_PASSWORD: ${_APP_DB_ROOT_PASS:?Database root password is required}
-      MYSQL_DATABASE: ${_APP_DB_SCHEMA:?Database name is required}
-      MYSQL_USER: ${_APP_DB_USER:?Database user is required}
-      MYSQL_PASSWORD: ${_APP_DB_PASS:?Database password is required}
     command: "mysqld --innodb-flush-method=fsync"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 12
+      start_period: 40s
 
-  # -------------------------------------------------------
-  # Redis — cache / queue (starts first)
-  # -------------------------------------------------------
+  # -----------------------------------------------------------
+  # Redis — In-memory cache & message queue
+  # -----------------------------------------------------------
   redis:
     image: redis:7.2.4-alpine
     <<: *x-logging
     restart: unless-stopped
     command: >
       redis-server
-      --maxmemory            512mb
-      --maxmemory-policy     allkeys-lru
-      --maxmemory-samples    5
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
     networks:
       - appwrite
     volumes:
@@ -73,19 +88,35 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
       start_period: 10s
 
-  # -------------------------------------------------------
-  # Appwrite — main API server
-  # -------------------------------------------------------
+  # -----------------------------------------------------------
+  # Appwrite API — Main application server
+  #
+  # This is the ONLY service exposed publicly.
+  # Coolify will detect the `labels` below and configure its
+  # built-in Traefik proxy to route appwrite.doitfastit.de → here.
+  # -----------------------------------------------------------
   appwrite:
     image: appwrite/appwrite:1.9.5
     <<: *x-logging
     restart: unless-stopped
     networks:
-      - gateway
       - appwrite
+    labels:
+      # Tell Coolify to expose this service
+      - "traefik.enable=true"
+      # HTTP router — Coolify's Traefik will auto-upgrade to HTTPS
+      - "traefik.http.routers.appwrite.rule=Host(`${_APP_DOMAIN:-appwrite.doitfastit.de}`)"
+      - "traefik.http.routers.appwrite.entrypoints=http"
+      - "traefik.http.services.appwrite.loadbalancer.server.port=80"
+      # HTTPS router
+      - "traefik.http.routers.appwrite-secure.rule=Host(`${_APP_DOMAIN:-appwrite.doitfastit.de}`)"
+      - "traefik.http.routers.appwrite-secure.entrypoints=https"
+      - "traefik.http.routers.appwrite-secure.tls=true"
+      - "traefik.http.routers.appwrite-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.appwrite-secure.loadbalancer.server.port=80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - appwrite-uploads:/storage/uploads:rw
@@ -100,41 +131,64 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # ---- Core ----
       _APP_ENV: ${_APP_ENV:-production}
+      _APP_WORKER_PER_CORE: ${_APP_WORKER_PER_CORE:-6}
       _APP_LOCALE: ${_APP_LOCALE:-en}
-      _APP_OPTIONS_ABUSE: ${_APP_OPTIONS_ABUSE:-enabled}
-      _APP_OPTIONS_FORCE_HTTPS: ${_APP_OPTIONS_FORCE_HTTPS:-disabled}
-      _APP_OPENSSL_KEY_V1: ${_APP_OPENSSL_KEY_V1:?Encryption key is required}
-      _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
-      _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
+
+      # ---- Security ----
+      _APP_OPENSSL_KEY_V1: ${_APP_OPENSSL_KEY_V1:-CHANGE_THIS_32_CHAR_SECRET_KEY_1}
+
+      # ---- Domain ----
+      _APP_DOMAIN: ${_APP_DOMAIN:-appwrite.doitfastit.de}
+      _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-appwrite.doitfastit.de}
       _APP_DOMAIN_FUNCTIONS: ${_APP_DOMAIN_FUNCTIONS:-}
+
+      # ---- Console ----
+      _APP_CONSOLE_WHITELIST_ROOT: ${_APP_CONSOLE_WHITELIST_ROOT:-enabled}
+      _APP_CONSOLE_WHITELIST_EMAILS: ${_APP_CONSOLE_WHITELIST_EMAILS:-}
+      _APP_CONSOLE_WHITELIST_IPS: ${_APP_CONSOLE_WHITELIST_IPS:-}
+
+      # ---- Options ----
+      _APP_OPTIONS_ABUSE: ${_APP_OPTIONS_ABUSE:-enabled}
+      _APP_OPTIONS_ROUTER_PROTECTION: ${_APP_OPTIONS_ROUTER_PROTECTION:-disabled}
+      _APP_OPTIONS_FORCE_HTTPS: ${_APP_OPTIONS_FORCE_HTTPS:-disabled}
+
+      # ---- Redis ----
       _APP_REDIS_HOST: ${_APP_REDIS_HOST:-redis}
       _APP_REDIS_PORT: ${_APP_REDIS_PORT:-6379}
       _APP_REDIS_USER: ${_APP_REDIS_USER:-}
       _APP_REDIS_PASS: ${_APP_REDIS_PASS:-}
+
+      # ---- Database ----
       _APP_DB_HOST: ${_APP_DB_HOST:-mariadb}
       _APP_DB_PORT: ${_APP_DB_PORT:-3306}
-      _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:?Database name is required}
-      _APP_DB_USER: ${_APP_DB_USER:?Database user is required}
-      _APP_DB_PASS: ${_APP_DB_PASS:?Database password is required}
+      _APP_DB_SCHEMA: ${_APP_DB_SCHEMA:-appwrite}
+      _APP_DB_USER: ${_APP_DB_USER:-appwrite}
+      _APP_DB_PASS: ${_APP_DB_PASS:-CHANGE_THIS_DB_PASSWORD}
+
+      # ---- SMTP / Email ----
       _APP_SMTP_HOST: ${_APP_SMTP_HOST:-}
       _APP_SMTP_PORT: ${_APP_SMTP_PORT:-}
       _APP_SMTP_SECURE: ${_APP_SMTP_SECURE:-}
       _APP_SMTP_USERNAME: ${_APP_SMTP_USERNAME:-}
       _APP_SMTP_PASSWORD: ${_APP_SMTP_PASSWORD:-}
-      _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
-      _APP_INFLUXDB_HOST: ${_APP_INFLUXDB_HOST:-}
-      _APP_INFLUXDB_PORT: ${_APP_INFLUXDB_PORT:-}
+      _APP_SYSTEM_EMAIL_NAME: ${_APP_SYSTEM_EMAIL_NAME:-Appwrite}
+      _APP_SYSTEM_EMAIL_ADDRESS: ${_APP_SYSTEM_EMAIL_ADDRESS:-team@appwrite.io}
+      _APP_SYSTEM_TEAM_EMAIL: ${_APP_SYSTEM_TEAM_EMAIL:-}
+
+      # ---- Storage ----
       _APP_STORAGE_LIMIT: ${_APP_STORAGE_LIMIT:-30000000}
       _APP_STORAGE_PREVIEW_LIMIT: ${_APP_STORAGE_PREVIEW_LIMIT:-20000000}
       _APP_STORAGE_ANTIVIRUS: ${_APP_STORAGE_ANTIVIRUS:-disabled}
-      _APP_STORAGE_ANTIVIRUS_HOST: ${_APP_STORAGE_ANTIVIRUS_HOST:-}
-      _APP_STORAGE_ANTIVIRUS_PORT: ${_APP_STORAGE_ANTIVIRUS_PORT:-}
+      _APP_STORAGE_ANTIVIRUS_HOST: ${_APP_STORAGE_ANTIVIRUS_HOST:-clamav}
+      _APP_STORAGE_ANTIVIRUS_PORT: ${_APP_STORAGE_ANTIVIRUS_PORT:-3310}
       _APP_STORAGE_DEVICE: ${_APP_STORAGE_DEVICE:-local}
       _APP_STORAGE_S3_ACCESS_KEY: ${_APP_STORAGE_S3_ACCESS_KEY:-}
       _APP_STORAGE_S3_SECRET: ${_APP_STORAGE_S3_SECRET:-}
-      _APP_STORAGE_S3_REGION: ${_APP_STORAGE_S3_REGION:-}
+      _APP_STORAGE_S3_REGION: ${_APP_STORAGE_S3_REGION:-us-east-1}
       _APP_STORAGE_S3_BUCKET: ${_APP_STORAGE_S3_BUCKET:-}
+      _APP_STORAGE_S3_ENDPOINT: ${_APP_STORAGE_S3_ENDPOINT:-}
       _APP_STORAGE_DO_SPACES_ACCESS_KEY: ${_APP_STORAGE_DO_SPACES_ACCESS_KEY:-}
       _APP_STORAGE_DO_SPACES_SECRET: ${_APP_STORAGE_DO_SPACES_SECRET:-}
       _APP_STORAGE_DO_SPACES_REGION: ${_APP_STORAGE_DO_SPACES_REGION:-}
@@ -151,61 +205,71 @@ services:
       _APP_STORAGE_WASABI_SECRET: ${_APP_STORAGE_WASABI_SECRET:-}
       _APP_STORAGE_WASABI_REGION: ${_APP_STORAGE_WASABI_REGION:-}
       _APP_STORAGE_WASABI_BUCKET: ${_APP_STORAGE_WASABI_BUCKET:-}
+
+      # ---- Functions / Compute ----
       _APP_FUNCTIONS_SIZE_LIMIT: ${_APP_FUNCTIONS_SIZE_LIMIT:-30000000}
       _APP_FUNCTIONS_TIMEOUT: ${_APP_FUNCTIONS_TIMEOUT:-900}
       _APP_FUNCTIONS_BUILD_TIMEOUT: ${_APP_FUNCTIONS_BUILD_TIMEOUT:-900}
       _APP_FUNCTIONS_CPUS: ${_APP_FUNCTIONS_CPUS:-0}
       _APP_FUNCTIONS_MEMORY: ${_APP_FUNCTIONS_MEMORY:-0}
-      _APP_FUNCTIONS_RUNTIMES: ${_APP_FUNCTIONS_RUNTIMES:-node-18.0,python-3.9,php-8.0}
-      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
-      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-executor/v1}
-      _APP_LOGGING_PROVIDER: ${_APP_LOGGING_PROVIDER:-}
-      _APP_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
+      _APP_FUNCTIONS_RUNTIMES: ${_APP_FUNCTIONS_RUNTIMES:-node-18.0,php-8.0,python-3.9,ruby-3.1}
+      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:-CHANGE_THIS_EXECUTOR_SECRET}
+      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-proxy/}
+
+      # ---- Usage ----
+      _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
+
+      # ---- Maintenance ----
       _APP_MAINTENANCE_INTERVAL: ${_APP_MAINTENANCE_INTERVAL:-86400}
       _APP_MAINTENANCE_RETENTION_CACHE: ${_APP_MAINTENANCE_RETENTION_CACHE:-2592000}
       _APP_MAINTENANCE_RETENTION_EXECUTION: ${_APP_MAINTENANCE_RETENTION_EXECUTION:-1209600}
       _APP_MAINTENANCE_RETENTION_AUDIT: ${_APP_MAINTENANCE_RETENTION_AUDIT:-1209600}
       _APP_MAINTENANCE_RETENTION_ABUSE: ${_APP_MAINTENANCE_RETENTION_ABUSE:-86400}
       _APP_MAINTENANCE_RETENTION_USAGE_HOURLY: ${_APP_MAINTENANCE_RETENTION_USAGE_HOURLY:-8640000}
+      _APP_MAINTENANCE_RETENTION_SCHEDULES: ${_APP_MAINTENANCE_RETENTION_SCHEDULES:-86400}
+
+      # ---- SMS ----
       _APP_SMS_PROVIDER: ${_APP_SMS_PROVIDER:-}
       _APP_SMS_FROM: ${_APP_SMS_FROM:-}
+
+      # ---- GraphQL ----
       _APP_GRAPHQL_MAX_BATCH_SIZE: ${_APP_GRAPHQL_MAX_BATCH_SIZE:-10}
       _APP_GRAPHQL_MAX_COMPLEXITY: ${_APP_GRAPHQL_MAX_COMPLEXITY:-250}
       _APP_GRAPHQL_MAX_DEPTH: ${_APP_GRAPHQL_MAX_DEPTH:-3}
+
+      # ---- VCS / GitHub App ----
       _APP_VCS_GITHUB_APP_NAME: ${_APP_VCS_GITHUB_APP_NAME:-}
       _APP_VCS_GITHUB_PRIVATE_KEY: ${_APP_VCS_GITHUB_PRIVATE_KEY:-}
       _APP_VCS_GITHUB_APP_ID: ${_APP_VCS_GITHUB_APP_ID:-}
       _APP_VCS_GITHUB_CLIENT_ID: ${_APP_VCS_GITHUB_CLIENT_ID:-}
       _APP_VCS_GITHUB_CLIENT_SECRET: ${_APP_VCS_GITHUB_CLIENT_SECRET:-}
       _APP_VCS_GITHUB_WEBHOOK_SECRET: ${_APP_VCS_GITHUB_WEBHOOK_SECRET:-}
+
+      # ---- Assistant ----
       _APP_ASSISTANT_OPENAI_API_KEY: ${_APP_ASSISTANT_OPENAI_API_KEY:-}
+
+      # ---- Logging ----
+      _APP_LOGGING_PROVIDER: ${_APP_LOGGING_PROVIDER:-}
+      _APP_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost/v1/health/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
 
-  # -------------------------------------------------------
-  # Appwrite Console — web UI
-  # -------------------------------------------------------
-  appwrite-console:
-    image: appwrite/console:8.2.1
-    <<: *x-logging
-    restart: unless-stopped
-    networks:
-      - gateway
-      - appwrite
-    environment:
-      _APP_DOMAIN: ${_APP_DOMAIN:?Domain is required}
-      _APP_DOMAIN_TARGET: ${_APP_DOMAIN_TARGET:-}
-
-  # -------------------------------------------------------
-  # Realtime worker
-  # -------------------------------------------------------
+  # -----------------------------------------------------------
+  # Realtime — WebSocket event broadcaster
+  # -----------------------------------------------------------
   appwrite-realtime:
     image: appwrite/appwrite:1.9.5
     entrypoint: realtime
     <<: *x-logging
     restart: unless-stopped
     networks:
-      - gateway
       - appwrite
     depends_on:
       mariadb:
@@ -216,9 +280,9 @@ services:
       <<: *common-variables
       _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
 
-  # -------------------------------------------------------
-  # Background workers
-  # -------------------------------------------------------
+  # -----------------------------------------------------------
+  # Worker — Audit logs
+  # -----------------------------------------------------------
   appwrite-worker-audits:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-audits
@@ -234,6 +298,9 @@ services:
     environment:
       <<: *common-variables
 
+  # -----------------------------------------------------------
+  # Worker — Webhooks
+  # -----------------------------------------------------------
   appwrite-worker-webhooks:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-webhooks
@@ -249,6 +316,9 @@ services:
     environment:
       <<: *common-variables
 
+  # -----------------------------------------------------------
+  # Worker — Deletes (file + cache cleanup)
+  # -----------------------------------------------------------
   appwrite-worker-deletes:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-deletes
@@ -270,6 +340,9 @@ services:
     environment:
       <<: *common-variables
 
+  # -----------------------------------------------------------
+  # Worker — Database operations
+  # -----------------------------------------------------------
   appwrite-worker-databases:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-databases
@@ -285,6 +358,9 @@ services:
     environment:
       <<: *common-variables
 
+  # -----------------------------------------------------------
+  # Worker — Builds (code compilation for functions/sites)
+  # -----------------------------------------------------------
   appwrite-worker-builds:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-builds
@@ -292,22 +368,28 @@ services:
     restart: unless-stopped
     networks:
       - appwrite
+      - runtimes
     depends_on:
       redis:
         condition: service_healthy
       mariadb:
         condition: service_healthy
+      openruntimes-executor:
+        condition: service_started
     volumes:
       - appwrite-functions:/storage/functions:rw
       - appwrite-builds:/storage/builds:rw
       - appwrite-uploads:/storage/uploads:rw
     environment:
       <<: *common-variables
-      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
-      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-executor/v1}
+      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:-CHANGE_THIS_EXECUTOR_SECRET}
+      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-proxy/}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # -----------------------------------------------------------
+  # Worker — SSL certificate provisioning
+  # -----------------------------------------------------------
   appwrite-worker-certificates:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-certificates
@@ -326,6 +408,9 @@ services:
     environment:
       <<: *common-variables
 
+  # -----------------------------------------------------------
+  # Worker — Serverless function execution dispatch
+  # -----------------------------------------------------------
   appwrite-worker-functions:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-functions
@@ -333,6 +418,7 @@ services:
     restart: unless-stopped
     networks:
       - appwrite
+      - runtimes
     depends_on:
       redis:
         condition: service_healthy
@@ -342,9 +428,12 @@ services:
         condition: service_started
     environment:
       <<: *common-variables
-      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
-      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-executor/v1}
+      _APP_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:-CHANGE_THIS_EXECUTOR_SECRET}
+      _APP_EXECUTOR_HOST: ${_APP_EXECUTOR_HOST:-http://openruntimes-proxy/}
 
+  # -----------------------------------------------------------
+  # Worker — Transactional email delivery
+  # -----------------------------------------------------------
   appwrite-worker-mails:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-mails
@@ -362,7 +451,12 @@ services:
       _APP_SMTP_SECURE: ${_APP_SMTP_SECURE:-}
       _APP_SMTP_USERNAME: ${_APP_SMTP_USERNAME:-}
       _APP_SMTP_PASSWORD: ${_APP_SMTP_PASSWORD:-}
+      _APP_SYSTEM_EMAIL_NAME: ${_APP_SYSTEM_EMAIL_NAME:-Appwrite}
+      _APP_SYSTEM_EMAIL_ADDRESS: ${_APP_SYSTEM_EMAIL_ADDRESS:-team@appwrite.io}
 
+  # -----------------------------------------------------------
+  # Worker — SMS / push messaging
+  # -----------------------------------------------------------
   appwrite-worker-messaging:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-messaging
@@ -380,6 +474,9 @@ services:
       _APP_SMS_PROVIDER: ${_APP_SMS_PROVIDER:-}
       _APP_SMS_FROM: ${_APP_SMS_FROM:-}
 
+  # -----------------------------------------------------------
+  # Worker — Data migrations
+  # -----------------------------------------------------------
   appwrite-worker-migrations:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-migrations
@@ -390,78 +487,16 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - appwrite-uploads:/storage/uploads:rw
     environment:
       <<: *common-variables
 
-  # -------------------------------------------------------
-  # Tasks / schedulers
-  # -------------------------------------------------------
-  appwrite-task-maintenance:
-    image: appwrite/appwrite:1.9.5
-    entrypoint: maintenance
-    <<: *x-logging
-    restart: unless-stopped
-    networks:
-      - appwrite
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      <<: *common-variables
-      _APP_MAINTENANCE_INTERVAL: ${_APP_MAINTENANCE_INTERVAL:-86400}
-      _APP_MAINTENANCE_RETENTION_CACHE: ${_APP_MAINTENANCE_RETENTION_CACHE:-2592000}
-      _APP_MAINTENANCE_RETENTION_EXECUTION: ${_APP_MAINTENANCE_RETENTION_EXECUTION:-1209600}
-      _APP_MAINTENANCE_RETENTION_AUDIT: ${_APP_MAINTENANCE_RETENTION_AUDIT:-1209600}
-      _APP_MAINTENANCE_RETENTION_ABUSE: ${_APP_MAINTENANCE_RETENTION_ABUSE:-86400}
-      _APP_MAINTENANCE_RETENTION_USAGE_HOURLY: ${_APP_MAINTENANCE_RETENTION_USAGE_HOURLY:-8640000}
-
-  appwrite-task-scheduler-functions:
-    image: appwrite/appwrite:1.9.5
-    entrypoint: schedule-functions
-    <<: *x-logging
-    restart: unless-stopped
-    networks:
-      - appwrite
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      <<: *common-variables
-
-  appwrite-task-scheduler-executions:
-    image: appwrite/appwrite:1.9.5
-    entrypoint: schedule-executions
-    <<: *x-logging
-    restart: unless-stopped
-    networks:
-      - appwrite
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      <<: *common-variables
-
-  appwrite-task-scheduler-messages:
-    image: appwrite/appwrite:1.9.5
-    entrypoint: schedule-messages
-    <<: *x-logging
-    restart: unless-stopped
-    networks:
-      - appwrite
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      <<: *common-variables
-
+  # -----------------------------------------------------------
+  # Worker — Resource usage statistics
+  # -----------------------------------------------------------
   appwrite-worker-stats-resources:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-stats-resources
@@ -478,6 +513,9 @@ services:
       <<: *common-variables
       _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
 
+  # -----------------------------------------------------------
+  # Worker — Usage aggregation statistics
+  # -----------------------------------------------------------
   appwrite-worker-stats-usage:
     image: appwrite/appwrite:1.9.5
     entrypoint: worker-stats-usage
@@ -494,9 +532,88 @@ services:
       <<: *common-variables
       _APP_USAGE_STATS: ${_APP_USAGE_STATS:-enabled}
 
-  # -------------------------------------------------------
-  # OpenRuntimes — function execution engine
-  # -------------------------------------------------------
+  # -----------------------------------------------------------
+  # Task — Database/cache maintenance & cleanup
+  # -----------------------------------------------------------
+  appwrite-task-maintenance:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: maintenance
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      redis:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+    environment:
+      <<: *common-variables
+      _APP_MAINTENANCE_INTERVAL: ${_APP_MAINTENANCE_INTERVAL:-86400}
+      _APP_MAINTENANCE_RETENTION_CACHE: ${_APP_MAINTENANCE_RETENTION_CACHE:-2592000}
+      _APP_MAINTENANCE_RETENTION_EXECUTION: ${_APP_MAINTENANCE_RETENTION_EXECUTION:-1209600}
+      _APP_MAINTENANCE_RETENTION_AUDIT: ${_APP_MAINTENANCE_RETENTION_AUDIT:-1209600}
+      _APP_MAINTENANCE_RETENTION_ABUSE: ${_APP_MAINTENANCE_RETENTION_ABUSE:-86400}
+      _APP_MAINTENANCE_RETENTION_USAGE_HOURLY: ${_APP_MAINTENANCE_RETENTION_USAGE_HOURLY:-8640000}
+      _APP_MAINTENANCE_RETENTION_SCHEDULES: ${_APP_MAINTENANCE_RETENTION_SCHEDULES:-86400}
+
+  # -----------------------------------------------------------
+  # Task — Scheduled function executor
+  # -----------------------------------------------------------
+  appwrite-task-scheduler-functions:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: schedule-functions
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *common-variables
+
+  # -----------------------------------------------------------
+  # Task — Scheduled execution runner
+  # -----------------------------------------------------------
+  appwrite-task-scheduler-executions:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: schedule-executions
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *common-variables
+
+  # -----------------------------------------------------------
+  # Task — Scheduled messaging dispatcher
+  # -----------------------------------------------------------
+  appwrite-task-scheduler-messages:
+    image: appwrite/appwrite:1.9.5
+    entrypoint: schedule-messages
+    <<: *x-logging
+    restart: unless-stopped
+    networks:
+      - appwrite
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *common-variables
+
+  # -----------------------------------------------------------
+  # OpenRuntimes Executor — Runs serverless function containers
+  # -----------------------------------------------------------
   openruntimes-executor:
     image: openruntimes/executor:0.7.1
     hostname: exc1
@@ -512,19 +629,22 @@ services:
       - appwrite-functions:/storage/functions:rw
       - /tmp:/tmp:rw
     environment:
-      OPR_EXECUTOR_IMAGE_PULL: enabled
+      OPR_EXECUTOR_IMAGE_PULL: ${OPR_EXECUTOR_IMAGE_PULL:-enabled}
       OPR_EXECUTOR_INACTIVE_TRESHOLD: ${_APP_COMPUTE_INACTIVE_THRESHOLD:-600}
       OPR_EXECUTOR_MAINTENANCE_INTERVAL: ${_APP_COMPUTE_MAINTENANCE_INTERVAL:-3600}
       OPR_EXECUTOR_NETWORK: ${_APP_COMPUTE_RUNTIMES_NETWORK:-runtimes}
       OPR_EXECUTOR_DOCKER_HUB_USERNAME: ${_APP_DOCKER_HUB_USERNAME:-}
       OPR_EXECUTOR_DOCKER_HUB_PASSWORD: ${_APP_DOCKER_HUB_PASSWORD:-}
       OPR_EXECUTOR_ENV: ${_APP_ENV:-production}
-      OPR_EXECUTOR_RUNTIMES: ${_APP_FUNCTIONS_RUNTIMES:-node-18.0,python-3.9,php-8.0}
-      OPR_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      OPR_EXECUTOR_RUNTIMES: ${_APP_FUNCTIONS_RUNTIMES:-node-18.0,php-8.0,python-3.9,ruby-3.1}
+      OPR_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:-CHANGE_THIS_EXECUTOR_SECRET}
       OPR_EXECUTOR_RUNTIME_VERSIONS: v5
       OPR_EXECUTOR_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
       OPR_EXECUTOR_STORAGE_DEVICE: ${_APP_STORAGE_DEVICE:-local}
 
+  # -----------------------------------------------------------
+  # OpenRuntimes Proxy — Load balancer for runtime executors
+  # -----------------------------------------------------------
   openruntimes-proxy:
     image: openruntimes/proxy:0.5.0
     hostname: proxy
@@ -534,11 +654,14 @@ services:
     networks:
       - appwrite
       - runtimes
+    depends_on:
+      openruntimes-executor:
+        condition: service_started
     environment:
       OPR_PROXY_WORKER_PER_CORE: ${_APP_WORKER_PER_CORE:-6}
       OPR_PROXY_ENV: ${_APP_ENV:-production}
-      OPR_PROXY_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
-      OPR_PROXY_SECRET: ${_APP_EXECUTOR_SECRET:?Executor secret is required}
+      OPR_PROXY_EXECUTOR_SECRET: ${_APP_EXECUTOR_SECRET:-CHANGE_THIS_EXECUTOR_SECRET}
+      OPR_PROXY_SECRET: ${_APP_EXECUTOR_SECRET:-CHANGE_THIS_EXECUTOR_SECRET}
       OPR_PROXY_LOGGING_CONFIG: ${_APP_LOGGING_CONFIG:-}
       OPR_PROXY_ALGORITHM: random
       OPR_PROXY_EXECUTORS: exc1
@@ -546,12 +669,26 @@ services:
       OPR_PROXY_MAX_TIMEOUT: 600
       OPR_PROXY_HEALTHCHECK: enabled
 
+# =============================================================
+# Networks
+#
+# - appwrite : internal service-to-service communication
+# - runtimes : isolated network for function runtime containers
+#
+# NOTE: Do NOT declare `gateway` as external.
+# Coolify automatically attaches its own proxy network to the
+# `appwrite` service via the labels above.
+# =============================================================
 networks:
-  gateway:
-    external: true
   appwrite:
+    driver: bridge
   runtimes:
+    driver: bridge
 
+# =============================================================
+# Volumes — all named so Docker manages persistence.
+# Data survives container recreations and Coolify redeployments.
+# =============================================================
 volumes:
   appwrite-mariadb:
   appwrite-redis:
