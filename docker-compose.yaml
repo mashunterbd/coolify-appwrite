@@ -7,6 +7,7 @@
 #   - DO NOT declare any custom networks.
 #   - DO NOT use "external: true" on any network.
 #   - DO NOT add Traefik labels — Coolify manages its proxy via UI.
+#   - DO NOT use container_name — Coolify needs dynamic naming for zero-downtime.
 #   - All services share Coolify's auto-created default network.
 # =============================================================
 
@@ -18,7 +19,6 @@ x-logging:
       max-size: 10m
 services:
   appwrite:
-    container_name: appwrite
     logging:
       driver: json-file
       options:
@@ -43,7 +43,7 @@ services:
       - appwrite-builds:/storage/builds:rw
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     environment:
       - _APP_ENV
@@ -179,7 +179,6 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-console
     image: appwrite/console:8.7.5
     restart: unless-stopped
   appwrite-realtime:
@@ -189,11 +188,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-realtime
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     restart: unless-stopped
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - redis
       - appwrite-embedding
     environment:
@@ -230,11 +228,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-audits
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     environment:
       - _APP_ENV
@@ -262,11 +259,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-webhooks
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     environment:
       - _APP_ENV
@@ -296,11 +292,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-deletes
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     volumes:
       - appwrite-uploads:/storage/uploads:rw
@@ -362,11 +357,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-databases
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     environment:
       - _APP_ENV
@@ -401,7 +395,6 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-builds
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     volumes:
       - appwrite-functions:/storage/functions:rw
@@ -409,7 +402,7 @@ services:
       - appwrite-builds:/storage/builds:rw
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     environment:
       - _APP_ENV
@@ -479,13 +472,12 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-screenshots
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     volumes:
       - appwrite-uploads:/storage/uploads:rw
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
     environment:
       - _APP_BROWSER_HOST
       - _APP_WORKER_SCREENSHOTS_ROUTER
@@ -539,11 +531,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-certificates
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     volumes:
       - appwrite-config:/storage/config:rw
@@ -583,11 +574,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-executions
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
     environment:
       - _APP_ENV
       - _APP_WORKERS_NUM=1
@@ -614,10 +604,9 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-functions
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - redis
     environment:
       - _APP_ENV
@@ -658,11 +647,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-mails
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mariadb}
+      - mariadb
     environment:
       - _APP_ENV
       - _APP_WORKERS_NUM=1
@@ -698,7 +686,6 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-messaging
     restart: unless-stopped
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     volumes:
@@ -756,14 +743,13 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-migrations
     restart: unless-stopped
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     volumes:
       - appwrite-imports:/storage/imports:rw
       - appwrite-uploads:/storage/uploads:rw
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
     environment:
       - _APP_ENV
       - _APP_WORKERS_NUM=1
@@ -802,10 +788,9 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-task-maintenance
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - redis
     environment:
       - _APP_ENV
@@ -847,10 +832,9 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-task-interval
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - redis
     environment:
       - _APP_ENV
@@ -879,7 +863,6 @@ services:
       - _APP_INTERVAL_DOMAIN_VERIFICATION
       - _APP_INTERVAL_CLEANUP_STALE_EXECUTIONS
   appwrite-task-stats-resources:
-    container_name: appwrite-task-stats-resources
     entrypoint: stats-resources
     restart: on-failure:3
     logging:
@@ -890,7 +873,7 @@ services:
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
     environment:
       - _APP_ENV
       - _APP_WORKER_PER_CORE
@@ -917,11 +900,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-stats-resources
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
     environment:
       - _APP_ENV
       - _APP_WORKERS_NUM=1
@@ -950,11 +932,10 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-worker-stats-usage
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
       - redis
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - appwrite-embedding
     environment:
       - _APP_ENV
@@ -985,10 +966,9 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-task-scheduler-functions
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - redis
       - appwrite-embedding
     environment:
@@ -1022,10 +1002,9 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-task-scheduler-executions
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - redis
       - appwrite-embedding
     environment:
@@ -1059,10 +1038,9 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-task-scheduler-messages
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     depends_on:
-      - ${_APP_DB_HOST:-mongodb}
+      - mariadb
       - redis
       - appwrite-embedding
     environment:
@@ -1082,15 +1060,12 @@ services:
       - _APP_DB_PASS
       - _APP_DATABASE_SHARED_TABLES
   appwrite-assistant:
-    container_name: appwrite-assistant
     image: appwrite/assistant:0.8.4
     environment:
       - _APP_ASSISTANT_OPENAI_API_KEY
   appwrite-browser:
-    container_name: appwrite-browser
     image: appwrite/browser:0.3.2
   openruntimes-executor:
-    container_name: exc1
     hostname: exc1
     logging:
       driver: json-file
@@ -1154,7 +1129,6 @@ services:
       start_period: 5s
   mariadb:
     image: mariadb:10.11
-    container_name: appwrite-mariadb
     logging:
       driver: json-file
       options:
@@ -1180,43 +1154,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
-  mongodb:
-    image: mongo:8.2.5
-    container_name: appwrite-mongodb
-    logging:
-      driver: json-file
-      options:
-        max-file: '5'
-        max-size: 10m
-    restart: on-failure:3
-    volumes:
-      - appwrite-mongodb:/data/db
-      - appwrite-mongodb-keyfile:/data/keyfile
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
-      - ./mongo-entrypoint.sh:/mongo-entrypoint.sh:ro
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=root
-      - MONGO_INITDB_ROOT_PASSWORD=${_APP_DB_ROOT_PASS}
-      - MONGO_INITDB_DATABASE=${_APP_DB_SCHEMA}
-      - MONGO_INITDB_USERNAME=${_APP_DB_USER}
-      - MONGO_INITDB_PASSWORD=${_APP_DB_PASS}
-    entrypoint:
-      - /bin/bash
-      - /mongo-entrypoint.sh
-    healthcheck:
-      test: "bash -c \"\n  mongosh -u root -p ${_APP_DB_ROOT_PASS} --authenticationDatabase\
-        \ admin --quiet --eval \\\"\n    try {\n      const hello = db.adminCommand({hello:\
-        \ 1});\n      if (hello.isWritablePrimary) {\n        quit(0);\n      }\n\
-        \    } catch (e) {}\n\n    try {\n      rs.initiate({_id: 'rs0', members:\
-        \ [{_id: 0, host: 'appwrite-mongodb:27017'}]});\n    } catch (e) {}\n\n  \
-        \  quit(1);\n  \\\" 2>/dev/null\n\"\n"
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
   postgresql:
     image: appwrite/postgres:0.1.0
-    container_name: appwrite-postgresql
     logging:
       driver: json-file
       options:
@@ -1248,7 +1187,6 @@ services:
     image: appwrite/embedding:0.1.0
     environment:
       EMBEDDING_MODELS: ${_APP_EMBEDDING_MODELS:-nomic-embed-text}
-    container_name: appwrite-embedding
     restart: unless-stopped
     volumes:
       - appwrite-models:/home/embedder/models
@@ -1259,7 +1197,6 @@ services:
       options:
         max-file: '5'
         max-size: 10m
-    container_name: appwrite-redis
     command:
       - redis-server
       - --maxmemory
@@ -1280,8 +1217,6 @@ services:
       retries: 12
 volumes:
   appwrite-mariadb: null
-  appwrite-mongodb: null
-  appwrite-mongodb-keyfile: null
   appwrite-postgresql: null
   appwrite-redis: null
   appwrite-cache: null
